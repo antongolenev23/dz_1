@@ -1,30 +1,19 @@
-"""probe — учебный сервис для домашнего задания № 1.
-
-Тот же сервис, что во второй лабораторной, но теперь с базой данных: он
-записывает заметки в базу и отдаёт их обратно. По ответу приложения видно,
-пережили ли данные пересоздание контейнеров.
-
-Перед сборкой заполните три строки ниже своими данными.
-"""
-
 import os
 import socket
 from urllib.parse import unquote, urlparse
 
 from flask import Flask, jsonify, request
 
-# ↓↓↓ заполните своими данными ↓↓↓
+
 STUDENT = "Голенев Антон Андреевич"
 GROUP = "БИСТ-23-ПО-3"
 MARKER_DEFAULT = "applab"
-# ↑↑↑ заполните своими данными ↑↑↑
+
 
 MARKER = os.environ.get("MARKER", MARKER_DEFAULT)
 APP_PORT = int(os.environ.get("APP_PORT", "5000"))
 
-# Адрес базы одной строкой, по схеме видно, какая база:
-#   postgresql://postgres:lab@host.docker.internal:8023/lab
-#   mysql://root:lab@host.docker.internal:8023/lab
+
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 app = Flask(__name__)
@@ -54,8 +43,6 @@ def connect():
     return kind, pymysql.connect(connect_timeout=5, **p)
 
 
-# Таблица создаётся при первом обращении: схему базы студент не пишет,
-# тема задания — где живут данные, а не SQL.
 DDL = {
     "postgresql": "CREATE TABLE IF NOT EXISTS notes ("
                   "id SERIAL PRIMARY KEY, text VARCHAR(200) NOT NULL, "
@@ -69,12 +56,6 @@ DDL = {
 
 
 def version():
-    """Версия из файла /app/VERSION, который пишется при сборке образа.
-
-    Файл создаёт строка RUN echo "$VERSION" > /app/VERSION из второй работы.
-    Каждая заметка помнит версию, которая её записала: после обновления
-    приложения видно, что старые заметки пережили смену образа.
-    """
     try:
         with open("/app/VERSION", encoding="utf-8") as f:
             return f.read().strip() or "dev"
@@ -83,23 +64,16 @@ def version():
 
 
 def describe(e):
-    """Текст ошибки вместе с причиной.
-
-    pg8000 на любой сбой подключения пишет одно и то же «Can't create a
-    connection», а настоящая причина — отказ, таймаут, имя не найдено —
-    лежит в __cause__. Без неё студенту нечего разбирать.
-    """
     cause = e.__cause__ or e.__context__
-    if cause is None or str(cause) in str(e):  # PyMySQL причину уже включает
+    if cause is None or str(cause) in str(e):
         return str(e)
     return "%s (%s)" % (e, cause)
 
 
 def with_db(action):
-    """Выполняет действие с базой; любую ошибку отдаёт текстом с кодом 503."""
     try:
         kind, conn = connect()
-    except Exception as e:  # noqa: BLE001 — студенту нужен текст ошибки как есть
+    except Exception as e:
         return jsonify(error="нет связи с базой", detail=describe(e)), 503
     try:
         cur = conn.cursor()
@@ -107,7 +81,7 @@ def with_db(action):
         result = action(cur)
         conn.commit()
         return result
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return jsonify(error="ошибка запроса к базе", detail=describe(e)), 503
     finally:
         conn.close()
@@ -124,7 +98,7 @@ def me():
         kind, p = db_params()
         database = "%s %s:%s" % (kind, p["host"], p["port"])
     except (RuntimeError, ValueError) as e:
-        # ValueError — порт в DATABASE_URL не числом, например оставлен «<порт>»
+
         database = str(e)
     return jsonify(
         student=STUDENT,
@@ -143,7 +117,7 @@ def add_note():
         return jsonify(error="пустая заметка: передайте -d text=..."), 400
 
     def insert(cur):
-        # %s — плейсхолдер у обоих драйверов в режиме по умолчанию
+
         cur.execute("INSERT INTO notes (text, host, version) VALUES (%s, %s, %s)",
                     (text[:200], socket.gethostname(), version()))
         return jsonify(saved=text[:200], hostname=socket.gethostname(),
